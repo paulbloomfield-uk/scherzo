@@ -1,2 +1,1 @@
-# scherzo
-PHP application framework
+# Scherzo web application framework for PHP

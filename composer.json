@@ -1,0 +1,21 @@
+{
+    "name": "scherzo/scherzo",
+    "description": "Scherzo application framework.",
+    "homepage": "https://github.com/paulbloomfield-uk/scherzo",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Paul Bloomfield",
+            "homepage": "https://github.com/paulbloomfield-uk/"
+        }
+    ],
+    "autoload": {
+        "psr-4": {"Scherzo\\": "src/Scherzo/"}
+    },
+    "require": {
+        "php": "^7.1",
+        "psr/container": "^1.0",
+        "nikic/fast-route": "^1.2",
+        "symfony/http-foundation": "^3.3"
+    }
+}
