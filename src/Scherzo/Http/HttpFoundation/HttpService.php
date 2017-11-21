@@ -71,7 +71,7 @@ class HttpService {
      *
      * @return Response A response object.
     **/
-    public function createResponse(string $body, int $status = 200, array $headers = []) {
+    public function createResponse(string $body, int $status = 200, array $headers = []) : Response {
         return new Response($body, $status, $headers);
     }
 
@@ -81,13 +81,13 @@ class HttpService {
      * @param  callable  $next     Method to invoke the next link in the chain of responsibility.
      * @param  null      $request  Null because the request hasn't yet been parsed.
     **/
-    public function parseRequestMiddleware(callable $next, Request $request = null) : Response {
+    public function parseRequestMiddleware(callable $next, Request &$request = null, Response &$response = null) : void {
         // create the request - it all starts here
         $request = Request::createFromGlobals();
         // add important parts of the request to the applicaiton configuration
         // $c->config->baseUrl = $request->getUriForPath(null);
         // return the response from the next handler in the chain
-        return $next($request);
+        $next($request, $response);
     }
 
     /**
@@ -96,16 +96,10 @@ class HttpService {
     * @param  callable  $next     Method to invoke the next link in the chain of responsibility.
     * @param  null      $request  The current request.
     **/
-    public function sendResponseMiddleware(callable $next, Request $request) : Response {
+    public function sendResponseMiddleware(callable $next, Request &$request = null, Response &$response = null) : void {
         // get a response from the next handler in the stack
-        $response = $next($request);
-
-        // if (!is_a($response, Response::class)) {
-        //     $response = new Response($response);
-        // }
-        // send the response
+        $next($request, $response);
         $response->prepare($request);
         $response->send();
-        return $response;
     }
 }

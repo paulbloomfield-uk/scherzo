@@ -12,7 +12,7 @@ namespace Scherzo\Container;
 use Scherzo\Exception;
 
 /**
- * Thrown by a Container if an entry is not found.
+ * Thrown by a Container if an entry exists but cannot be loaded.
 **/
 class ContainerException extends Exception
     implements \Psr\Container\ContainerExceptionInterface {}

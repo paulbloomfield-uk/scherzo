@@ -1,0 +1,6 @@
+
+# Composer packages
+vendor/
+
+# Documentation
+docs/

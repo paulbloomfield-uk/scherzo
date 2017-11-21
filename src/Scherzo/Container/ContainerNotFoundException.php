@@ -9,7 +9,7 @@
 
 namespace Scherzo\Container;
 
-use Scherzo\Container\ContainerException;
-
-class ContainerNotFoundException extends ContainerException
-    implements \Psr\Container\NotFoundExceptionInterface {}
+/**
+ * Thrown by a Container if an entry is not found.
+**/
+class ContainerNotFoundException extends \Scherzo\Container\ContainerException {}

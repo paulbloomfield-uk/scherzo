@@ -41,8 +41,8 @@ class HandlerStack {
      * @param  mixed  $request  Request to process.
      * @return mixed  Response to pass back.
     **/
-    public function __invoke($request = null) {
-        return $this->next($request);
+    public function __invoke(&$request, &$response) {
+        return $this->next($request, $response);
     }
 
     /**
@@ -51,8 +51,7 @@ class HandlerStack {
      * @param  mixed  $request  Request to process.
      * @return mixed  Response to pass back.
     **/
-    public function next($request = null) {
-
+    protected function getNextHandler() {
         // start or increment the stack pointer
         if ($this->stackPointer === null) {
             $this->stackPointer = 0;
@@ -65,12 +64,23 @@ class HandlerStack {
             throw new \Exception('Cannot call past the end of the stack');
         }
 
-        $handler = $this->stack[$this->stackPointer];
+        return $this->stack[$this->stackPointer];
+    }
+
+    /**
+     * Invoke the next item on the stack.
+     *
+     * @param  mixed  $request  Request to process.
+     * @return mixed  Response to pass back.
+    **/
+    public function next(&$request, &$response) : void {
+
+        $handler = $this->getNextHandler();
 
         // deal with a closure
         if ($handler instanceof \Closure) {
-            // REVISIT: return $handler->call($this, $request);
-            return $handler($this, $request);
+            $handler->call($this->container, $this, $request, $response);
+            return;
         }
 
         // deal with a service if we have a container to find it in
@@ -78,24 +88,17 @@ class HandlerStack {
             $service = $handler[0];
             if ($this->container->has($service)) {
                 $method = $handler[1];
-                return $this->container->get($service)->$method($this, $request);
+                $this->container->get($service)->$method($this, $request, $response);
+                return;
             }
         }
 
         if (is_callable($handler)) {
-            return $handler->call($this, $request);
+            $handler($this, $request, $response);
+            return;
         }
 
-        try {
-            $e = new Exception(['Cannot call the next item in the stack :service->:method()', [
-                ':service' => $handler[0],
-                ':method' => $handler[1],
-                ]]);
-        } catch (\Throwable $e) {
-            throw $e;
-            throw new \Exception('Cannot call the next item in the stack');
-        }
-        throw $e;
+        throw new \Exception('Cannot call the next item in the stack');
     }
 
     /**

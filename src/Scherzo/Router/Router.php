@@ -11,6 +11,9 @@ namespace Scherzo\Router;
 
 use Scherzo\Services\ServiceTrait;
 
+use Scherzo\Http\RequestInterface as Request;
+use Scherzo\Http\ResponseInterface as Response;
+
 // external dependency
 use FastRoute\RouteCollector as Collector;
 use FastRoute\RouteParser\Std as Parser;
@@ -66,7 +69,7 @@ class Router {
                     'method' => $method,
                     'path' => $path,
                     'route' => $routeInfo[1],
-                    'params' => $routeInfo[2],
+                    'vars' => $routeInfo[2],
                 ];
             case Matcher::NOT_FOUND:
                 throw new RouterNotFoundException("Not Found $method $path");
@@ -90,11 +93,11 @@ class Router {
      * @param  Request   $request  Null because the request hasn't yet been parsed.
      * @return Response  The response from the rest of the pipeline.
     **/
-    public function matchRouteMiddleware(callable $next, \Scherzo\Http\RequestInterface $request = null) : \Scherzo\Http\ResponseInterface {
+    public function matchRouteMiddleware(callable $next, Request &$request = null, Response &$response = null) : void {
         $http = $this->container->http;
         $router = $this->container->router;
 
-        $router->addRoutes($this->container->config->get('routes', null, []));
+        $router->addRoutes($this->container->config['routes']);
 
         $method = $http->getRequestMethod($request);
         $path = $http->getRequestPath($request);
@@ -102,12 +105,13 @@ class Router {
         try {
             $route = $router->match($method, $path);
         } catch (\Scherzo\Router\RouterException $e) {
-            return $http->createResponse('Not Found', 404);
+            $response = $http->createResponse('Not Found', 404);
+            return;
         }
 
         $http->setRequestAttribute($request, 'route', $route);
 
-        return $next($request);
+        $next($request, $response);
     }
 
     /**
@@ -120,22 +124,23 @@ class Router {
      * @param  Request   $request  Null because the request hasn't yet been parsed.
      * @return Response  The response from the rest of the pipeline.
     **/
-    public function executeRouteMiddleware(callable $next, \Scherzo\Http\RequestInterface $request = null) : \Scherzo\Http\ResponseInterface {
+    public function executeRouteMiddleware(callable $next, Request &$request = null, Response &$response = null) : void {
 
         $http = $this->container->http;
         $route = $http->getRequestAttribute($request, 'route');
         $action = $route['route'];
+        $vars = $route['vars'];
         if ($action instanceof \Closure) {
-            return call($action, $this->container, $vars, $request);
+            $response = $action->call($this->container, $vars, $request);
+            return;
         } else {
             $controller = new $action[0]($this->container, $request);
             $method = $action[1];
-            $response = $controller->$method($route['params']);
-            if ($response instanceof \Scherzo\Http\ResponseInterface) {
-                return $response;
-            } else {
-                return $http->createResponse($response);
+            $response = $controller->$method($route['vars']);
+            if (!($response instanceof \Scherzo\Http\ResponseInterface)) {
+                $response = $http->createResponse($response);
             }
+            return;
         }
     }
 }
