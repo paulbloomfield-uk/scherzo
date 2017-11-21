@@ -24,14 +24,10 @@ use Scherzo\Router\Router;
 **/
 class FrontController {
 
-    /** @var Container DI container. */
-    protected $container;
-
     /** @var array Default settings. */
     protected $defaults = [
         'app' => [
             'container' => Container::class,
-            'config' => Config::class,
         ],
         'services' => [
             'http' => Http::class,
@@ -42,6 +38,15 @@ class FrontController {
         'middleware' => [],
         'routeMiddleware' => [],
     ];
+
+    /** @var array Current settings. */
+    protected $settings;
+
+    /** @var array All config options. */
+    protected $config;
+
+    /** @var Container DI container. */
+    protected $container;
 
     /** @var array Http handler stacks. */
     // HttpFoundation Request::createFromGlobals();
@@ -58,59 +63,58 @@ class FrontController {
     ];
 
     /**
+     *
+    **/
+    public function __construct() {
+        // don't want any uncaught errors
+        set_error_handler(function ($severity, $message, $file, $line) {
+            if (!(error_reporting() & $severity)) {
+                // This error code is not included in error_reporting
+                return;
+            }
+            throw new \ErrorException($message, 0, $severity, $file, $line);
+        });
+
+        // get the app settings
+        $options = func_get_args();
+        array_unshift($options, $this->defaults);
+        $this->config = call_user_func_array('array_merge_recursive', $options);
+        $this->settings = $this->config['app'];
+    }
+
+    /**
      * Run the application.
      *
      * @param  array  $options  Array of configuration settings arrays.
     **/
-    public function run(array $options = []) : void {
-        // $time = microtime(true);
+    public function run() : void {
         try {
 
-            // don't want any uncaught errors
-            set_error_handler(function ($severity, $message, $file, $line) {
-                if (!(error_reporting() & $severity)) {
-                    // This error code is not included in error_reporting
-                    return;
-                }
-                throw new \ErrorException($message, 0, $severity, $file, $line);
-            });
-
-            // get the app settings
-            $appSettings = $this->defaults['app'];
-            foreach ($options as $config) {
-                if (isset($config['app'])) {
-                    $appSettings = array_merge_recursive($appSettings, $config['app']);
-                }
+            if (isset($this->settings['namespace'])) {
+                $namespace = $this->settings['namespace'];
+                $path = $this->settings['appDir'];
+                $this->settings['loader']->addPsr4("$namespace\\", "$path/src/$namespace");
             }
 
-            $namespace = $appSettings['namespace'];
-            $path = $appSettings['appDir'];
-
-            $appSettings['loader']->addPsr4("$namespace\\", "$path/src/$namespace");
-
             // create the container
-            $this->container = new $appSettings['container'];
+            $this->container = new $this->settings['container'];
             // $this->container->startTime = $time;
 
             // create the config service
-            array_push($options, $this->defaults);
-            $this->container->config = new $appSettings['config']($this, 'config', $options);
+            $this->container->config = $this->config;
 
             // add services to the container for lazy-loading
-            $this->container->defineArray($this->container->config->services);
+            $this->container->define($this->container->config['services']);
 
             // load configurtation for use by services, and reload app settings to avoid conflict
             // $this->settings = $this->container->config->load($options)->get('app');
 
             // build the http stack
             $stack = (new HandlerStack($this->container))->pushMultiple($this->httpStack);
-            $stack->push(
-                function ($next, $request) {
-                    return $this->container->http->createResponse('Hello Old World');
-            });
 
             // invoke the stack
-            $response = $stack();
+            $request = $response = null;
+            $stack($request, $response);
             // echo sprintf("\n %.2f ms", (microtime(true) - $this->container->startTime) * 1000);
 
         } catch (\Throwable $error) {

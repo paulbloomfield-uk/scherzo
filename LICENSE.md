@@ -1,3 +1,5 @@
+# MIT license
+
 Copyright © 2017 [Paul Bloomfield](https://github.com/paulbloomfield-uk/).
 
 Permission is hereby granted, free of charge, to any person obtaining a copy

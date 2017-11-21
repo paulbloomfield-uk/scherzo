@@ -15,82 +15,64 @@ use Scherzo\Container\ContainerNotFoundException;
 /**
  * PSR-11 compliant container.
 **/
-class Container {
+class Container implements \Psr\Container\ContainerInterface {
 
     /** @var array Entry definitions. */
-    protected $definitions = [];
-
-    /** @var array Container entries. */
-    protected $entries = [];
+    protected $_definitions = [];
 
     /**
-     * Get magic method.
-     *
-     * Provide access to entries as $c->entry as well as $c->get('entry').
+     * Magic method to lazy-load an entry.
      *
      * @param string $id Identifier of the entry to get.
+     *
+     * @throws ContainerNotFoundException  No entry was found for this identifier.
+     *
      * @return mixed The value of the property.
     **/
     public function __get(string $id) {
-        return $this->get($id);
+        if (array_key_exists($id, $this->_definitions)) {
+            return $this->load($id);
+        }
+        throw new ContainerNotFoundException([
+            'Entry :id does not exist in this container', [
+                ':id' => $id,
+            ]]);
     }
 
     /**
-     * Set magic method.
+     * Define an entry or entries for lazy-loading.
      *
-     * Provide access to entries as `$c->entry = $foo` as well as `$c->set('entry', $foo)`.
-     *
-     * @param string $id Identifier of the entry to set.
-     * @param mixed  $value The value to be set.
+     * @param  string  $idOrArray   Identifier of the entry to define.
+     * @param  array   $idOrArray   Associative array of definitions keyed by identifier.
+     * @param  mixed   $definition  The definition to be set.
+     * @return $this   Chainable.
     **/
-    public function __set(string $id, $value) {
-        $this->set($id, $value);
-    }
-
-    /**
-     * Define a array of entries.
-     *
-     * @param  array $id The property definitions as an array [$id => $value].
-     * @return $this Chainable.
-    **/
-    public function defineArray(array $definitions) : self {
-        $this->definitions = array_merge($this->definitions, $definitions);
+    public function define($id, $definition = null) : self {
+        if (is_array($id)) {
+            $this->_definitions = array_merge($this->_definitions, $id);
+            return $this;
+        }
+        $this->_definitions[$id] = $definition;
         return $this;
     }
 
     /**
-     * Finds an entry of the container by its identifier, lazy-loads it if required, and returns it.
+     * PSR-11 compatible method to retrieve an entry, lazy-loading it if required.
      *
      * @param string $id Identifier of the entry to get.
      *
      * @throws ContainerNotFoundException  No entry was found for this identifier.
      * @throws ContainerException Error while retrieving the entry.
      *
-     * @return mixed The Entry.
-     */
+     * @return mixed The entry.
+    **/
     public function get($id) {
-        try {
-            if (!array_key_exists($id, $this->entries)) {
-                if (array_key_exists($id, $this->definitions)) {
-                    $this->entries[$id] = $this->loadDefinedEntry($id);
-                } else {
-                    throw new ContainerNotFoundException([
-                        'Entry :id does not exist in this container', [
-                            ':id' => $id,
-                        ]]);
-                }
-            }
-            return $this->entries[$id];
-        } catch (ContainerNotFoundException $e) {
-            throw $e;
-        } catch (\Throwable $e) {
-            throw $e;
-            throw new ContainerException([
-                'Could not retrieve entry \':id\'. :msg]', [
-                    ':id' => $id,
-                    ':msg' => $e->getMessage(),
-                ]], 0, $e);
+        // Return the entry if it exists.
+        if (property_exists($this, $id)) {
+            return $this->$id;
         }
+        // Otherwise try to lazy-load it.
+        return $this->__get($id);
     }
 
     /**
@@ -104,47 +86,85 @@ class Container {
      * @return bool
     **/
     public function has($id) {
-        return array_key_exists($id, $this->entries)
-            || array_key_exists($id, $this->definitions);
-    }
-
-    /**
-     * Define an entry for lazy-loading.
-     *
-     * @param string $id         Identifier of the entry to define.
-     * @param mixed  $definition The definition to be set.
-     * @return $this Chainable.
-    **/
-    public function define(string $id, $definition) {
-        $this->definitions[$id] = $definition;
-        return $this;
-    }
-
-    /**
-     * Set an entry.
-     *
-     * @param string $id    Identifier of the entry to set.
-     * @param mixed  $value The value to be set.
-     * @return $this   Chainable.
-    **/
-    public function set(string $id, $value) : self {
-        $this->entries[$id] = $value;
-        return $this;
+        return $id !== '_definitions' && property_exists($this, $id)
+            || array_key_exists($id, $this->_definitions);
     }
 
     /**
      * Load a defined entry.
      *
-     * @param string $id Identifier of the entry to load.
-     * @return mixed The value of the entry.
+     * @param  string  $id    Identifier of the definition to load.
+     * @param  string  $asId  Optional identifier to load the definition as.
+     * @param  bool    $asId  Set to false to return the entry without loading it.
+     * @return mixed   The value of the entry.
     **/
-    protected function loadDefinedEntry(string $id) {
-        $definition = $this->definitions[$id];
-        if (is_callable($definition)) {
-            return call($definition, $this);
-        } else {
-            return new $definition($this, $id);
+    public function load(string $id, $asId = null) {
+        if ($asId === null) {
+            $asId = $id;
+        } elseif ($asId === false) {
+            $asId = null;
         }
+
+        // Find the defintion.
+        if (!array_key_exists($id, $this->_definitions)) {
+            throw new ContainerNotFoundException([
+                'Entry ":id" has not been defined in this container', [
+                    ':id' => $id,
+                ]]);
+        }
+        $definition = $this->_definitions[$id];
+
+        // Check for an illegal entry id.
+        if ($asId === '_definitions') {
+            throw new ContainerException([
+                'Cannot create a container entry with the id ":id"', [
+                    ':id' => $asId,
+                ]]);
+        }
+
+        $entry = $this->loadDefinition($definition);
+
+        if ($asId === null) {
+            return $entry;
+        }
+
+        try {
+            $this->$asId = $entry;
+        } catch (\Throwable $error) {
+            throw new ContainerException([
+                'Cannot create a container entry with the id ":id"', [
+                    ':id' => $asId,
+                ]]);
+        }
+        return $entry;
     }
 
+    /**
+     * Load a defined entry.
+     *
+     * @param  mixed   $definition    The definition to load.
+     * @param  string  $asId          Optional identifier to load the definition as.
+     * @return mixed   The value of the entry.
+    **/
+    protected function loadDefinition($definition, string $asId = null) {
+
+        // Load a service from a Closure.
+        if (is_object($definition) && gettype($definition) === \Closure::class) {
+            return $definition->call($this, $asId);
+        }
+
+        // Load a service from a factory method (now we know it is not a Closure).
+        if (is_callable($definition)) {
+            return $definition($this, $asId);
+
+        }
+
+        // Load a singleton service.
+        if (class_exists($definition)) {
+            return new $definition($this, $asId);
+        }
+
+        // Load anythuing else.
+        return $definition;
+    }
 }
