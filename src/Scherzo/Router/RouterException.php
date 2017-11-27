@@ -12,4 +12,4 @@ namespace Scherzo\Router;
 /**
  * Thrown by a Container if an entry is not found.
 **/
-class RouterException extends \Exception {}
+class RouterException extends \Scherzo\Exception {}

@@ -34,7 +34,7 @@ class Container implements \Psr\Container\ContainerInterface {
             return $this->load($id);
         }
         throw new ContainerNotFoundException([
-            'Entry :id does not exist in this container', [
+            'This container does not have a \':id\' entry', [
                 ':id' => $id,
             ]]);
     }
@@ -149,7 +149,7 @@ class Container implements \Psr\Container\ContainerInterface {
     protected function loadDefinition($definition, string $asId = null) {
 
         // Load a service from a Closure.
-        if (is_object($definition) && gettype($definition) === \Closure::class) {
+        if ($definition instanceof \Closure) {
             return $definition->call($this, $asId);
         }
 

@@ -32,9 +32,10 @@ trait ControllerTrait {
      * Constructor.
      *
     **/
-    public function __construct(Container $container, Request $request = null) {
+    public function __construct(Container $container, Request $request, Response &$response = null) {
         $this->container = $container;
         $this->request   = $request;
+        $this->response  = &$response;
     }
 
     /**
@@ -42,7 +43,7 @@ trait ControllerTrait {
      *
      * @TODO deal with the body, including passing an array of errors in an API response.
     **/
-    protected function createNotFoundResponse($body = null) : Response {
+    protected function createNotFoundResponse($body = null) : void {
         if ($body === null) {
             $path = $this->container->http->getRequestBasePath($this->request) . $this->container->http->getRequestPath($this->request);
             $body = strtr(
@@ -50,20 +51,35 @@ trait ControllerTrait {
                 ':path' => $path,
             ]);
         }
-        return $this->createResponse($body, 404);
+        $this->createResponse($body, 404);
     }
 
     /**
      * @TODO handle a body as an array to give a JSON response.
     **/
-    protected function createErrorResponse($body, int $status = 500) : Response {
-        return $this->createResponse($body, $status);
+    protected function createErrorResponse($body, int $status = 500) : void {
+        if (!is_string($body)) {
+            if ($body['message']) {
+                $message = $body['message'];
+                unset($body['message']);
+            } else {
+                $message = 'Error';
+            }
+            $body = json_encode([
+                'error' => $message,
+                'errors' => $body,
+            ], JSON_PRETTY_PRINT);
+        }
+        $this->createResponse($body, $status);
     }
 
     /**
      * @TODO handle a body as an array to give a JSON response.
     **/
-    protected function createResponse($body, int $status = 200, array $headers = []) : Response {
-        return $this->container->http->createResponse((string)$body, $status, $headers);
+    protected function createResponse($body, int $status = 200, array $headers = []) : void {
+        if (!is_string($body)) {
+            $body = json_encode($body, JSON_PRETTY_PRINT);
+        }
+        $this->response = $this->container->http->createResponse($body, $status, $headers);
     }
 }

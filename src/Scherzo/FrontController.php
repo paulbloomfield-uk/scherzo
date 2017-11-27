@@ -89,11 +89,11 @@ class FrontController {
     **/
     public function run() : void {
         try {
-
             if (isset($this->settings['namespace'])) {
+                // print_r($this->settings); die;
                 $namespace = $this->settings['namespace'];
-                $path = $this->settings['appDir'];
-                $this->settings['loader']->addPsr4("$namespace\\", "$path/src/$namespace");
+                $path = $this->settings['appDir'] . strtr("/src/$namespace", '\\', '/');
+                $this->settings['loader']->addPsr4("$namespace\\", $path);
             }
 
             // create the container
@@ -123,8 +123,7 @@ class FrontController {
                     ->handleUncaught($error)->send();
                 return;
             } catch (\Throwable $e) {
-                throw new \Exception ('Error (' . $e->getMessage()
-                    . ') handling previous error (' . $error->getMessage() . ')', 0, $error);
+                throw new \Exception('Error ' . $e->getMessage() . ' handling previous error', 0, $error);
             }
         }
     }

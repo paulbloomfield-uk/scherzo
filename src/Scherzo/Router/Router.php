@@ -9,6 +9,8 @@
 
 namespace Scherzo\Router;
 
+use Scherzo\Router\RouterException;
+
 use Scherzo\Services\ServiceTrait;
 
 use Scherzo\Http\RequestInterface as Request;
@@ -130,17 +132,32 @@ class Router {
         $route = $http->getRequestAttribute($request, 'route');
         $action = $route['route'];
         $vars = $route['vars'];
+
         if ($action instanceof \Closure) {
-            $response = $action->call($this->container, $vars, $request);
-            return;
-        } else {
-            $controller = new $action[0]($this->container, $request);
+            // Load a controller from a Closure.
+            $controllerResponse = $action->call($this->container, $vars, $request, $response);
+        } elseif (class_exists($action[0])) {
+            // Load a controller class.
+            $controller = new $action[0]($this->container, $request, $response);
             $method = $action[1];
-            $response = $controller->$method($route['vars']);
-            if (!($response instanceof \Scherzo\Http\ResponseInterface)) {
-                $response = $http->createResponse($response);
-            }
+            $controllerResponse = $controller->$method($route['vars']);
+        } else {
+            throw new RouterException([
+                'Could not execute route for action ":action"', [
+                ':action' => $action[0],
+            ]]);
+        }
+        // a response object is OK, but it is the reference that needs modifying
+        if ($controllerResponse instanceof Response) {
+            $response = $controllerResponse;
             return;
         }
+        // if we have a void response this is good
+        if ($controllerResponse === null && $response instanceof Response) {
+            return;
+        }
+        // otherwise, lets create the response
+        $response = $http->createResponse($controllerResponse ?? 'Null response');
+        return;
     }
 }
